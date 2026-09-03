@@ -1,1 +1,485 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Super Pixel World - Versão Beta</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      background-color: #0d0d11;
+      color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      text-align: center;
+      margin: 0;
+      padding: 10px;
+      touch-action: manipulation;
+    }
+    h1 {
+      color: #ffcc00;
+      text-shadow: 3px 3px #ff0000;
+      margin-bottom: 5px;
+    }
+    #gameContainer {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+    }
+    canvas {
+      border: 4px solid #fff;
+      display: block;
+      margin: 0 auto;
+      /* Mantém os pixels super nítidos sem borrar */
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      max-width: 100%;
+      height: auto;
+      background-color: #5c94fc;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 15px;
+    }
+    .btn {
+      background-color: #e52521;
+      color: #fff;
+      border: 3px solid #fff;
+      padding: 15px 25px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 8px;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: pointer;
+      box-shadow: 0 5px #900;
+    }
+    .btn:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px #900;
+    }
+    .jump-btn { background-color: #fbd000; color: #000; box-shadow: 0 5px #a08000; }
+    .jump-btn:active { box-shadow: 0 2px #a08000; }
+  </style>
+</head>
+<body>
+
+  <h1>🎮 SUPER PIXEL WORLD (BETA) 🎮</h1>
+  <p>Pule pelas plataformas, pegue as moedas e alcance o Mastro Verde!</p>
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+  </div>
+
+  <!-- Controles Virtuais para Celular / Android -->
+  <div class="controls">
+    <button class="btn" id="btnLeft">⬅️ ESQ</button>
+    <button class="btn jump-btn" id="btnJump">🚀 PULAR</button>
+    <button class="btn" id="btnRight">➡️ DIR</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Desativa suavização para visual 100% Pixel Art
+    ctx.imageSmoothingEnabled = false;
+
+    // Física e Globais
+    const gravity = 0.5;
+    let score = 0;
+    let currentLevel = 0;
+    let frameCount = 0;
+
+    // Jogador com quadros de animação estilo Mario
+    const player = {
+      x: 50,
+      y: 300,
+      width: 28,
+      height: 36,
+      speed: 4,
+      dx: 0,
+      dy: 0,
+      jumping: false,
+      facing: 'right',
+      animFrame: 0
+    };
+
+    // Nuvens Animadas com cores vivas e saturadas
+    const clouds = [
+      { x: 50, y: 40, speed: 0.3, color: '#00ffff' },  // Ciano vivo
+      { x: 300, y: 70, speed: 0.5, color: '#ff77a8' }, // Rosa neon
+      { x: 550, y: 30, speed: 0.2, color: '#ffff00' }, // Amarelo vibrante
+      { x: 750, y: 60, speed: 0.4, color: '#00ff66' }  // Verde brilhante
+    ];
+
+    // Definição das 4 Fases Completas da Beta
+    const levels = [
+      // FASE 1: Planície do Céu Azul
+      {
+        bg: "#3878f8",
+        platforms: [
+          { x: 0, y: 360, w: 800, h: 40 },
+          { x: 180, y: 270, w: 120, h: 20 },
+          { x: 360, y: 200, w: 120, h: 20 },
+          { x: 540, y: 270, w: 120, h: 20 }
+        ],
+        coins: [
+          { x: 230, y: 230, collected: false },
+          { x: 410, y: 160, collected: false },
+          { x: 590, y: 230, collected: false }
+        ],
+        spikes: [],
+        flag: { x: 730, y: 280, w: 10, h: 80 }
+      },
+      // FASE 2: Caverna Pixelada Noturna
+      {
+        bg: "#110926",
+        platforms: [
+          { x: 0, y: 360, w: 220, h: 40 },
+          { x: 280, y: 300, w: 100, h: 20 },
+          { x: 440, y: 220, w: 100, h: 20 },
+          { x: 580, y: 150, w: 220, h: 250 }
+        ],
+        coins: [
+          { x: 320, y: 260, collected: false },
+          { x: 480, y: 180, collected: false },
+          { x: 640, y: 110, collected: false }
+        ],
+        spikes: [
+          { x: 140, y: 340, w: 50, h: 20 }
+        ],
+        flag: { x: 730, y: 70, w: 10, h: 80 }
+      },
+      // FASE 3: O Castelo do Fogo
+      {
+        bg: "#440607",
+        platforms: [
+          { x: 0, y: 360, w: 140, h: 40 },
+          { x: 190, y: 310, w: 80, h: 20 },
+          { x: 320, y: 250, w: 80, h: 20 },
+          { x: 450, y: 190, w: 80, h: 20 },
+          { x: 570, y: 130, w: 230, h: 270 }
+        ],
+        coins: [
+          { x: 220, y: 270, collected: false },
+          { x: 350, y: 210, collected: false },
+          { x: 480, y: 150, collected: false }
+        ],
+        spikes: [
+          { x: 210, y: 290, w: 40, h: 20 },
+          { x: 340, y: 230, w: 40, h: 20 }
+        ],
+        flag: { x: 720, y: 50, w: 10, h: 80 }
+      },
+      // FASE 4: O Desafio Final da Beta
+      {
+        bg: "#082e14",
+        platforms: [
+          { x: 0, y: 360, w: 120, h: 40 },
+          { x: 160, y: 290, w: 60, h: 20 },
+          { x: 270, y: 220, w: 60, h: 20 },
+          { x: 380, y: 160, w: 60, h: 20 },
+          { x: 490, y: 220, w: 60, h: 20 },
+          { x: 600, y: 280, w: 200, h: 120 }
+        ],
+        coins: [
+          { x: 180, y: 250, collected: false },
+          { x: 290, y: 180, collected: false },
+          { x: 400, y: 120, collected: false },
+          { x: 510, y: 180, collected: false }
+        ],
+        spikes: [
+          { x: 390, y: 140, w: 40, h: 20 }
+        ],
+        flag: { x: 730, y: 200, w: 10, h: 80 }
+      }
+    ];
+
+    // Controles Teclado
+    const keys = {};
+    window.addEventListener("keydown", e => keys[e.key] = true);
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    // Controles Touch (Android)
+    const bindBtn = (id, keyName) => {
+      const btn = document.getElementById(id);
+      btn.addEventListener("touchstart", (e) => { e.preventDefault(); keys[keyName] = true; });
+      btn.addEventListener("touchend", () => keys[keyName] = false);
+      btn.addEventListener("mousedown", () => keys[keyName] = true);
+      btn.addEventListener("mouseup", () => keys[keyName] = false);
+    };
+
+    bindBtn("btnLeft", "ArrowLeft");
+    bindBtn("btnRight", "ArrowRight");
+    bindBtn("btnJump", "ArrowUp");
+
+    function resetPlayer() {
+      player.x = 30;
+      player.y = 200;
+      player.dx = 0;
+      player.dy = 0;
+    }
+
+    // --- RENDERIZAÇÃO EM PIXEL ART DESENHADA VIA CÓDIGO ---
+
+    // Desenha nuvens pixeladas vivas
+    function drawPixelCloud(cloud) {
+      ctx.fillStyle = cloud.color;
+      const x = cloud.x;
+      const y = cloud.y;
+      
+      // Blocos pixelados da nuvem
+      ctx.fillRect(x + 10, y, 40, 10);
+      ctx.fillRect(x, y + 10, 60, 15);
+      ctx.fillRect(x + 5, y + 25, 50, 8);
+      
+      // Sombra pixelada
+      ctx.fillStyle = "rgba(0,0,0,0.2)";
+      ctx.fillRect(x + 5, y + 25, 50, 8);
+    }
+
+    // Desenha o personagem clássico (Mario Pixel)
+    function drawPixelPlayer() {
+      ctx.save();
+      
+      // Inverte imagem caso olhe para esquerda
+      if (player.facing === 'left') {
+        ctx.translate(player.x + player.width, player.y);
+        ctx.scale(-1, 1);
+      } else {
+        ctx.translate(player.x, player.y);
+      }
+
+      // Animação de corrida (offset das pernas)
+      let legOffset = (player.dx !== 0 && !player.jumping && Math.floor(frameCount / 6) % 2 === 0) ? 4 : 0;
+
+      // Chapéu / Boné Vermelho
+      ctx.fillStyle = "#ff0000";
+      ctx.fillRect(4, 0, 20, 8);
+      ctx.fillRect(4, 4, 24, 4);
+
+      // Rosto / Pele
+      ctx.fillStyle = "#ffcc99";
+      ctx.fillRect(8, 8, 16, 8);
+      // Olho
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(20, 10, 3, 4);
+
+      // Bigode clássico
+      ctx.fillStyle = "#4a2500";
+      ctx.fillRect(14, 14, 10, 3);
+
+      // Camisa Vermelha
+      ctx.fillStyle = "#ff0000";
+      ctx.fillRect(6, 16, 18, 8);
+
+      // Macacão Azul
+      ctx.fillStyle = "#0026ff";
+      ctx.fillRect(8, 22, 14, 10);
+      // Botões do Macacão (Amarelos)
+      ctx.fillStyle = "#ffff00";
+      ctx.fillRect(10, 24, 2, 2);
+      ctx.fillRect(18, 24, 2, 2);
+
+      // Sapatos / Pés Pixelados
+      ctx.fillStyle = "#4a2500";
+      ctx.fillRect(4 - legOffset, 32, 10, 4);
+      ctx.fillRect(14 + legOffset, 32, 10, 4);
+
+      ctx.restore();
+    }
+
+    // Desenha tijolos pixelados
+    function drawPixelBlock(x, y, w, h) {
+      ctx.fillStyle = "#b84418"; // Vermelho Tijolo
+      ctx.fillRect(x, y, w, h);
+
+      // Linhas de cimento estilo Mario
+      ctx.fillStyle = "#fce0a8";
+      for (let i = 0; i < w; i += 20) {
+        ctx.fillRect(x + i, y, 2, h);
+      }
+      ctx.fillRect(x, y, w, 2);
+      ctx.fillRect(x, y + h - 2, w, 2);
+    }
+
+    // Desenha Moeda Giratória Animada
+    function drawPixelCoin(x, y) {
+      const anim = Math.floor(frameCount / 10) % 3;
+      ctx.fillStyle = "#ffd700";
+      ctx.strokeStyle = "#ff8800";
+      
+      let width = 12;
+      let offsetX = 0;
+      if (anim === 1) { width = 8; offsetX = 2; }
+      if (anim === 2) { width = 4; offsetX = 4; }
+
+      ctx.fillRect(x + offsetX, y, width, 14);
+      ctx.strokeRect(x + offsetX, y, width, 14);
+    }
+
+    // --- ATUALIZAÇÃO E LÓGICA DO JOGO ---
+
+    function update() {
+      frameCount++;
+      const lvl = levels[currentLevel];
+
+      // Mover nuvens
+      clouds.forEach(c => {
+        c.x += c.speed;
+        if (c.x > canvas.width) c.x = -60;
+      });
+
+      // Movimentos do jogador
+      if (keys["ArrowRight"] || keys["d"] || keys["D"]) {
+        player.dx = player.speed;
+        player.facing = 'right';
+      } else if (keys["ArrowLeft"] || keys["a"] || keys["A"]) {
+        player.dx = -player.speed;
+        player.facing = 'left';
+      } else {
+        player.dx = 0;
+      }
+
+      // Pulo
+      if ((keys["ArrowUp"] || keys["w"] || keys["W"] || keys[" "]) && !player.jumping) {
+        player.dy = -11.5;
+        player.jumping = true;
+      }
+
+      // Gravidade
+      player.dy += gravity;
+      player.x += player.dx;
+      player.y += player.dy;
+
+      // Colisão Plataformas
+      player.jumping = true;
+      lvl.platforms.forEach(p => {
+        if (
+          player.x < p.x + p.w &&
+          player.x + player.width > p.x &&
+          player.y + player.height <= p.y + player.dy + 5 &&
+          player.y + player.height >= p.y
+        ) {
+          player.y = p.y - player.height;
+          player.dy = 0;
+          player.jumping = false;
+        }
+      });
+
+      // Colisão Moedas
+      lvl.coins.forEach(c => {
+        if (!c.collected &&
+            player.x < c.x + 14 &&
+            player.x + player.width > c.x &&
+            player.y < c.y + 14 &&
+            player.y + player.height > c.y) {
+          c.collected = true;
+          score += 100;
+        }
+      });
+
+      // Colisão Espinhos Mortais
+      lvl.spikes.forEach(s => {
+        if (
+          player.x < s.x + s.w &&
+          player.x + player.width > s.x &&
+          player.y < s.y + s.h &&
+          player.y + player.height > s.y
+        ) {
+          alert("💥 Você encostou nos espinhos! Tente a fase novamente.");
+          resetPlayer();
+        }
+      });
+
+      // Morte ao cair da tela
+      if (player.y > canvas.height) {
+        alert("😱 Você caiu no abismo!");
+        resetPlayer();
+      }
+
+      // Chegada na Bandeira / Mastro
+      const f = lvl.flag;
+      if (
+        player.x < f.x + f.w + 20 &&
+        player.x + player.width > f.x &&
+        player.y < f.y + f.h &&
+        player.y + player.height > f.y
+      ) {
+        if (currentLevel < levels.length - 1) {
+          alert(`🏆 FASE ${currentLevel + 1} CONCLUÍDA!\nPrepare-se para a próxima fase da Beta!`);
+          currentLevel++;
+          resetPlayer();
+        } else {
+          alert(`🎉 PARABÉNS! Você Zerou a BETA do Super Pixel World!\nPontuação final: ${score} pontos.`);
+          currentLevel = 0;
+          score = 0;
+          levels.forEach(l => l.coins.forEach(c => c.collected = false));
+          resetPlayer();
+        }
+      }
+
+      // Limites das bordas
+      if (player.x < 0) player.x = 0;
+      if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+    }
+
+    function draw() {
+      const lvl = levels[currentLevel];
+
+      // Fundo
+      ctx.fillStyle = lvl.bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Desenhar Nuvens Coloridas Animadas
+      clouds.forEach(drawPixelCloud);
+
+      // Desenhar Plataformas
+      lvl.platforms.forEach(p => drawPixelBlock(p.x, p.y, p.w, p.h));
+
+      // Desenhar Moedas Animadas
+      lvl.coins.forEach(c => {
+        if (!c.collected) drawPixelCoin(c.x, c.y);
+      });
+
+      // Desenhar Espinhos (Vermelho Neon)
+      ctx.fillStyle = "#ff0055";
+      lvl.spikes.forEach(s => {
+        for (let i = 0; i < s.w; i += 10) {
+          ctx.beginPath();
+          ctx.moveTo(s.x + i, s.y + s.h);
+          ctx.moveTo(s.x + i + 5, s.y);
+          ctx.lineTo(s.x + i + 10, s.y + s.h);
+          ctx.fill();
+        }
+      });
+
+      // Mastro da Bandeira
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(lvl.flag.x, lvl.flag.y, lvl.flag.w, lvl.flag.h);
+      ctx.fillStyle = "#00ff66"; // Bandeira Verde
+      ctx.fillRect(lvl.flag.x + lvl.flag.w, lvl.flag.y + 5, 30, 20);
+
+      // Desenhar Personagem
+      drawPixelPlayer();
+
+      // Placar de HUD (Pixel Art)
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 18px 'Courier New', monospace";
+      ctx.fillText(`FASE: ${currentLevel + 1}/4 (BETA)`, 20, 30);
+      ctx.fillText(`PONTOS: ${score}`, 20, 55);
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+  </html>
 
